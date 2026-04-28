@@ -1,0 +1,277 @@
+# importing SparkSession class from pyspark.sql module
+from pyspark.sql import SparkSession
+What it does:  
+Imports the SparkSession class from the pyspark.sql module.
+
+Why it matters:  
+SparkSession is the entry point to PySpark—almost everything you do (DataFrames, SQL, reading files) goes through it.
+
+------------------------------------------------------------------------------
+# Create or reuse the SparkSession and store it in a variable caleld spark
+
+spark = SparkSession.builder.getOrCreate()
+
+SparkSession.builder
+What it is:  
+builder is a configurator object attached to SparkSession.
+
+.getOrCreate()
+Meaning:
+If a SparkSession already exists → return that one.
+If it doesn’t exist yet → create a new one.
+
+spark = ...
+What it does:  
+Assigns the resulting SparkSession object to the variable spark.
+
+------------------------------------------------------------------------------
+# more options to get or create or get spark session.
+
+spark = SparkSession.appName("dataframes_session") \ 
+                    .master("local[*]") \
+                    .getOrCreate
+
+.appName("my_app")
+What it means
+You are giving your Spark application a name: "my_app".
+Useful when multiple jobs run on the same cluster.
+
+.master("local[*]")
+What it means
+You are telling Spark where to run.
+
+"local[*]" = run Spark locally on your laptop
+
+* = use all CPU cores
+
+------------------------------------------------------------------------------
+# DIFFERENT WAYS TO CREATE PYSPARK DATAFRAME
+
+1. Create a PySpark DataFrame from a list of rows
+✔ When to use it
+Quick testing
+Small sample data
+Mocking interview problems
+No schema needed (Spark infers it)
+✔ What happens
+Spark looks at the Python data types
+Automatically infers the schema
+Creates a DataFrame
+✔ Why this is useful
+Fastest way to create a DataFrame for practice or debugging.
+
+2. Create a PySpark DataFrame with an explicit schema
+✔ When to use it
+You want full control over data types
+You want to avoid schema inference
+You need strict types for ETL pipelines
+You want to enforce nullable / non‑nullable fields
+You’re working with production‑like data
+✔ What happens
+Spark uses your schema, not inferred types
+You control:
+column names
+data types
+nullability
+✔ Why this is useful
+This is how real data engineering pipelines are built.
+
+3. Create a PySpark DataFrame from a pandas DataFrame
+✔ When to use it
+You already have data in pandas
+You’re converting local data → Spark
+You’re doing hybrid pandas + PySpark work
+You want to scale pandas code to Spark
+✔ What happens
+Pandas DataFrame is converted to Spark DataFrame
+Spark infers schema from pandas types
+Useful for small → medium datasets
+✔ Why this is useful
+Great for:
+Data exploration
+Converting CSV/Excel data
+Migrating pandas code to Spark
+
+------------------------------------------------------------------------------
+# create a PySpark DataFrame from a list of rows
+
+# way1
+from datetime import datetime, date
+from pyspark.sql import Row
+
+df1 = spark.createDataFrame([
+    Row(id=1,name = 'john',dob=(date(1990,1,1,)),salary=10000),
+    Row(id=2,name='mary',dob=date(1995,3,11),salary=5000)
+])
+df1.show()
+
+Execution time : 482 ms
+
+This uses Row objects.
+Row objects require extra processing.
+Spark must:
+1. Inspect each Row object
+2. Extract field names
+3. Extract field values
+4. Infer schema from Row metadata (Schema inference is expensive).
+5. Convert Row → Internal Spark Row format
+This adds overhead.
+When to use Row objects->
+Rarely — only when you need named fields inside Python before creating the DataFrame.
+NOT recommended for production.
+
+
+------------------------------------------------------------------------------
+
+# create a PySpark DataFrame from a list of rows
+
+# way2 - high performance comapred to way1
+# need not import Row class
+data = [(1,'john',date(1990,1,1),10000),(2,'mary',date(1995,3,11),5000)]
+df2 = spark.createDataFrame(data,["id","name","dob","salary"])
+df2.show()
+
+Execution time : 191 ms
+
+This uses Python tuple object.
+Spark:
+Reads the tuple
+Uses the column names you provided
+Infers schema directly from Python types
+Converts tuple → Internal Spark Row format
+No metadata extraction.
+No Row parsing.
+No field-name lookup.
+This is much faster.
+Spark skips schema inference for field names since field names are already given.(skips the expensive part)
+Recommended for production.
+
+------------------------------------------------------------------------------
+# Create a PySpark DataFrame with an explicit schema.
+
+# Create pyspark dataframe with an explicit schema
+from datetime import date,datetime
+from pyspark.sql.types import StructType,StructField,LongType,DoubleType,StringType,DateType,TimestampType
+
+schema = StructType([
+    StructField("a",LongType(),True),
+    StructField("b",DoubleType(),True),
+    StructField("c",StringType(),False),
+    StructField("d",DateType(),True),
+    StructField("e",TimestampType(),False)
+    ])
+df3 = spark.createDataFrame([(1,2.0,"str1",date(1990,1,1),datetime(2000,4,13,5,10,10)),
+                             (5,6.0,"str2",date(1995,2,5),datetime(1997,6,10,10,10,15))
+                             ], schema = schema
+                            )
+df3.show()
+# Execution time : 458ms
+
+imports ->
+✔ What this does
+date, datetime → Python date/time objects  - for python tuples.
+StructType, StructField → Used to define a schema
+LongType, DoubleType, StringType, DateType, TimestampType → Spark data types
+✔ Why this matters
+Spark needs Spark-specific data types to build a schema.
+Python types alone are not enough.
+
+Defining Schema ->
+✔ What this does
+You are defining the structure of the DataFrame manually.
+StructType([...])
+Represents the entire schema (like a table definition).
+StructField("a", LongType(), True)
+Each StructField defines one column
+repeat this for all columns.
+✔ Why this matters
+You avoid schema inference
+You enforce strict data types
+You control nullability
+This is production‑grade ETL style
+
+Creating the DataFrame ->
+✔ What this does
+You pass a list of Python tuples
+You pass your explicit schema
+Spark converts the tuples → internal Spark rows using your schema
+✔ Why this is the best performance method
+Tuples are lightweight
+No Row object overhead
+No schema inference
+Spark directly applies your schema
+Fastest way to create a DataFrame manually
+
+------------------------------------------------------------------------------
+# Creating a pyspark dataframe from pandas dataframe
+
+1. Load or create data in pandas, which lives in local Python memory (CSV/Excel/API/manual creation).
+2. Pass the pandas DataFrame to Spark using spark.createDataFrame(pdf), where Spark converts local rows into distributed Spark rows.
+3. Spark distributes the data across the cluster, applies schema inference (unless you provide one), and creates a fully parallelized Spark DataFrame ready for big‑data processing.
+
+------------------------------------------------------------------------------
+# Viewing or displaying DataFrame data
+
+1. show ()
+    - Default = 20 rows
+    - Show top 20 rows by default
+    - To display top N rows : df.show(N)
+    - Triggers Spark job execution
+    - displays rows in tabular format
+    - To display rows in vertical format : df.show(vertical=True)
+    - To display top  rows in vertical format : df.show(N, vertical = True)
+        ✔ Useful when rows are wide  
+        ✔ Easier to read long strings / JSON columns
+
+------------------------------------------------------------------------------
+# Inspecting schema and column names
+
+1. columns 
+    df.columns
+    - Displays column names in dataframe
+2. Schema
+    df.printSchema()
+    - Shows column names, types, and nullability
+    -  Very important for debugging ETL pipelines
+
+------------------------------------------------------------------------------
+# View Summary Statistics
+
+1.describe()
+ - Describes statistics of selected columns.
+  - df.select("column_name").describe().show()
+  ✔ Gives count, mean, stddev, min, max
+  ✔ Works only on numeric columns for stats
+  ✔ Strings show only min/max (lexicographically)
+
+------------------------------------------------------------------------------
+# Collecting Data to Driver
+
+1. Collect()
+    - brings all data to the driver.
+    - If the dataset is large → OutOfMemoryError.
+    - Use only for:
+        Small datasets
+        Debugging
+        Unit tests
+Alternatives to collect to avoid out of memory issues.
+
+2. take  /  tail
+    - df.take(N)  : Take first N rows
+    - df.tail(N)  : Take last N rows
+        ✔ Much safer than collect()  
+        ✔ Does NOT load entire dataset
+        ✔ Works well for sampling
+
+------------------------------------------------------------------------------
+# convert spark dataframe to pandas dataframe
+
+1.toPandas()
+    - collects all data to driver memory.
+    - Large DataFrame → driver crash.
+    - Use only when:
+        Data is small
+        You need pandas functionality
+        You are exporting to Excel/CSV locally
+
+------------------------------------------------------------------------------
