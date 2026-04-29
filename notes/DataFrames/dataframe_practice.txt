@@ -275,3 +275,52 @@ Alternatives to collect to avoid out of memory issues.
         You are exporting to Excel/CSV locally
 
 ------------------------------------------------------------------------------
+# Selecting and Accessing Dataframe data
+
+1. Lazy Evaluation
+    PySpark DataFrames are lazily evaluated — no computation runs until an action is called.
+    Selecting a column (df.a) returns a Column object, not data.
+    Column-wise operations like upper(), isNull() also return Column objects.
+    Computation triggers only on actions: .show(), .collect(), .count(), .write.
+
+2. Column References
+    Dot notation: df.a
+    Bracket notation: df["a"] — preferred when column names have spaces or special characters.
+    col() function: from pyspark.sql.functions import col → col("a").
+    All three return the same Column object.
+
+3. select() — Pick Columns
+    Returns a new DataFrame with only the chosen columns.
+    Accepts one or more Column objects or column name strings.
+    Original DataFrame remains unchanged (immutable).
+    SQL equivalent: SELECT c FROM df.
+
+4. withColumn() — Add or Replace a Column
+    Takes two arguments: column name (string) and column expression.
+    If the name exists → overwrites that column.
+    If the name is new → appends the column.
+    Returns a new DataFrame; original is unchanged.
+    SQL equivalent: SELECT *, UPPER(c) AS upper_c FROM df.
+
+5. filter() / where() — Pick Rows
+    Both are aliases — identical behavior.
+    Accepts a Column condition that evaluates to boolean.
+    Returns a new DataFrame with matching rows only.
+    Supports standard operators: ==, !=, >, <, >=, <=.
+    Chain multiple filters: df.filter(cond1).filter(cond2).
+    SQL equivalent: WHERE a = 1.
+
+6. Transformations vs Actions
+    Transformations (lazy): select(), filter(), withColumn(), groupBy(), join() — build the execution plan only.
+    Actions (trigger execution): show(), collect(), count(), first(), take(n), write.
+    Spark optimizes the full chain of transformations before running anything — this is the Catalyst optimizer.
+
+7. Common Pitfalls
+    Forgetting .show() and assuming select() printed results.
+    Using Python == in filter() is correct; using = is assignment and will error.
+    withColumn() does not modify in place — always assign the result to a variable.
+    Column name conflicts after join() — use alias() or bracket notation to disambiguate.
+
+------------------------------------------------------------------------------
+
+
