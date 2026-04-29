@@ -1,0 +1,113 @@
+# PySpark UDFs
+
+1. Regular UDF:
+    Processes one row at a time.
+    Python object serialization per row → slow.
+    Use only when no built-in function exists.
+
+2. Pandas UDF:
+    Processes column as Pandas Series in batches.
+    Uses Apache Arrow for Spark ↔ Python transfer → 10x–100x faster.
+    Input and output must have same row count.
+    Decorated with @pandas_udf('return_type').
+
+3. mapInPandas:
+    Receives full DataFrame batches via iterator.
+    Output can have different row count (filter, explode, aggregate).
+    Must provide output schema.
+    Use for: filtering, reshaping, ML inference per partition.
+
+4. Performance Hierarchy :
+    built-in Spark functions  >  Pandas UDF  >  regular UDF
+       (fastest)                    (fast)       (slowest)
+
+------------------------------------------------------------------------------
+# Grouping / Aggregating data
+
+DataFrame  →  has: select(), filter(), agg(), withColumn()
+            ❌ does NOT have: avg(), sum(), count()
+
+GroupedData →  has: avg(), sum(), count(), agg()
+               ↑ returned by groupBy()
+
+1. DataFrame-Level Aggregation (No Grouping)
+    Aggregates the entire DataFrame into a single row
+    Use df.select(avg('col')) or df.agg(sum('col'))
+    .avg(), .sum() are NOT DataFrame methods — use inside select() or agg()
+    Can pass multiple functions: df.agg(sum('a'), avg('b'), count('*'))
+    Use .alias('name') to rename output columns
+
+2. groupBy().agg() — Group + Aggregate
+    Groups by key → collapses each group to one row
+    Pattern: df.groupBy('col').agg(func('col').alias('name'))
+    Can group by multiple columns: groupBy('col1', 'col2')
+    Can chain multiple agg functions in one .agg() call
+    .avg(), .sum(), .count() work directly on GroupedData, not DataFrame
+    SQL equivalent: SELECT col, AVG(x) FROM df GROUP BY col
+
+3. Built-in Aggregate Functions
+    sum() — total
+    avg() — average
+    count() — non-null row count; count('*') for all rows
+    countDistinct() — unique value count
+    min() / max() — smallest / largest
+    first() / last() — first / last value in group
+    collect_list() — all values as list (keeps duplicates)
+    collect_set() — unique values as list
+    stddev() / variance() — statistical measures
+    All imported from pyspark.sql.functions
+
+4. Conditional Aggregation
+    PySpark version of SQL SUM(CASE WHEN ... THEN ... END)
+    Pattern: sum(when(condition, col).otherwise(0))
+    count(when(condition, True)) — conditional count
+    Combine multiple conditions inside one .agg() call
+
+5. pivot() — Rows to Columns
+    Turns unique values of a column into separate columns
+    Pattern: df.groupBy('key').pivot('col').sum('val')
+    Pass explicit values for performance: .pivot('col', ['a', 'b']) — avoids extra scan
+    Missing combinations fill with null
+    Great for crosstab / matrix-style output
+
+6. applyInPandas() — Custom Logic Per Group
+    Each group arrives as a full Pandas DataFrame
+    Can do anything Pandas supports — filter, reshape, calculate
+    Output can have any row count (more, fewer, or same)
+    Must provide output schema
+    Uses Apache Arrow for fast Spark ↔ Pandas transfer
+    Use when built-in functions can't express your logic
+    Pattern: df.groupBy('key').applyInPandas(func, schema=df.schema)
+
+7. cogroup().applyInPandas() — Two DataFrames Grouped Together
+    Groups two DataFrames by the same key
+    Sends matching groups as two Pandas DataFrames to your function
+    You define how to combine them (merge, compare, calculate)
+    Output can have any row count and schema
+    Must wrap scalar values in [ ] inside pd.DataFrame({...})
+    Schema in output must exactly match the schema string provided
+    Slowest option — use only when needed
+
+8. Window Functions — Aggregate Without Collapsing
+    Aggregate values while keeping all rows
+    Pattern: func('col').over(Window.partitionBy('key').orderBy('col'))
+    Common functions: row_number(), rank(), dense_rank(), lag(), lead(), sum(), avg()
+                      rank() has gaps; dense_rank() has no gaps
+                      lag(col, n) — value from n rows before; lead(col, n) — n rows after
+    Must import from pyspark.sql.window import Window
+
+9. Performance Hierarchy
+    Built-in agg() → fastest (Catalyst optimized)
+    Window functions → slight shuffle cost
+    applyInPandas() → fast via Arrow, but Python overhead
+    cogroup() → slowest, shuffles two DataFrames
+    Rule: always try built-in first → window → applyInPandas → cogroup
+
+10. Common Mistakes
+    Calling .avg() on a DataFrame instead of GroupedData → AttributeError
+    Forgetting .alias() → ugly auto-generated column names
+    Missing [ ] in pd.DataFrame({...}) for scalar values → length mismatch error
+    Schema typos in applyInPandas / cogroup → runtime crash
+    Using collect_list on huge groups → OOM risk
+
+------------------------------------------------------------------------------
