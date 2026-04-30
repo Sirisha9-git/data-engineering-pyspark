@@ -159,3 +159,296 @@ df4.withColumn("upper_name",upper(df4.name)).show()
 # filter rows
 # Returns a new DataFrame with only rows matching the condition.
 df4.filter(df4.id ==1).show()
+
+# COMMAND ----------
+
+# explain() - Reading execution plans.
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder.getOrCreate()
+
+explain_df = spark.createDataFrame([['red', 'banana', 1, 10],
+    ['blue', 'banana', 2, 20],
+    ['red', 'carrot', 3, 30],
+    ],schema=['color','fruit','price1','price2'])
+
+# simple plan:
+explain_df.filter(col('color')=='red').explain()
+
+# Detailed plan:
+explain_df.filter(col('color')=='red').explain(True)
+
+# Detialed plan for groupBy
+explain_df.groupBy('color').avg('price1').explain(True)
+
+
+# COMMAND ----------
+
+# Removing duplicates
+
+dup_df = spark.createDataFrame([
+    ['red','banana'],
+    ['red','banana'],
+    ['blue','grape'],
+    ['blue','grape'],
+    ['blue','banana']
+],schema=['color','fruit'])
+
+# distinct() - Removes exact full row duplicates
+# dup_df.distinct().show()
+dup_df.distinct().explain() # - Shuffle - Exchange appears
+
+# dropduplicates() - Removes whole row duplicates. Same as distinct(). no args.
+# dup_df.dropDuplicates().show()
+dup_df.dropDuplicates().explain() # - Shuffle - Exchange appears
+
+# dropduplicates with args. Removes duplicates based on given column.
+# dup_df.dropDuplicates(['color']).show()
+# keeps the first occurence of each color
+dup_df.dropDuplicates(['color']).explain() # - Shuffle - Exchange appears
+
+# COMMAND ----------
+
+# Narrow vs Wide Transformations 
+
+# Narrow Transformation
+from pyspark.sql.functions import col
+df = spark.range(1,21).repartition(4)
+
+narrow_df = df.filter("id>5") \
+        .select((col("id")*2.0).alias("id_2")) \
+        .withColumn("id_2_sum",col("id_2")+1)
+#narrow_df.show()
+narrow_df.explain()
+# Only one stage in the Physical Plan. No Exchange keyword. All operations are pipelined
+
+# COMMAND ----------
+
+# Wide Transformation
+df = spark.range(1,21).repartition(4)
+df.groupBy().count().explain()
+# Two stages( 2 EXCHANGE keywords) in the DAG. Shuffle boundary created.
+
+# COMMAND ----------
+
+# Narrow vs Wide Transformation
+# Narrow.
+df.filter("id>5").explain()
+# Wide
+df.groupBy("id").count().explain()
+
+
+# COMMAND ----------
+
+# Joins (Wide Transformation)
+# shuffle vs Broadcast join
+from pyspark.sql.functions import broadcast
+
+df1=spark.range(1,1000).withColumn("key",(col("id")%10))
+df2=spark.range(1,10).withColumn("key",col("id"))
+
+# shuffle
+df1.join(df2,"key","inner").explain()
+
+# Broadcast join
+df1.join(broadcast(df2),"key","inner").explain()
+
+
+# COMMAND ----------
+
+# Repartition vs Coalesce
+
+df1 = spark.range(1,21).repartition(10)
+
+# Repartition - shuffle - Exchange appears
+df1.repartition(20).explain()
+# Coalesce - no shuffle - No Exchange appears
+df1.coalesce(2).explain()
+
+# COMMAND ----------
+
+# DAG building
+# See how Spark pipelines operations.
+
+df = spark.range(1,21).repartition(10)
+
+df.filter("id>5") \
+    .select("id") \   # stage 1 - Narrow Transformation
+        .groupBy("id").count() \ - Stage 2 - Wide Transformation
+            .explain()
+
+# COMMAND ----------
+
+# Getting Data IN/OUT
+
+# Source file
+df = spark.createDataFrame([
+    ['red',   'banana', 1, 10],
+    ['blue',  'banana', 2, 20],
+    ['red',   'carrot', 3, 30],
+    ['blue',  'grape',  4, 40],
+    ['red',   'carrot', 5, 50],
+    ['black', 'carrot', 6, 60],
+    ['red',   'banana', 7, 70],
+    ['red',   'grape',  8, 80]
+    ],schema = ['color','fruit','price1','price2'])
+
+df.show()
+base = '/Volumes/workspace/default/pyspark_io'
+# write to csv
+#df.write.csv(f"{base}/basic_csv_write", header=True,mode ='overwrite')
+df.write.csv(
+    f"{base}/all_op_csv_write",
+    header=True,         # Include column names in the first row.
+    sep=',',             # Field delimiter (default is comma).
+    quote = '"',         # Character used to quote fields.
+    escape = '"',        # Escape character for quotes.
+    encoding = 'UTF-8',  # Character encoding.
+    mode='overwrite',    # overwrite-Replace existing folder,append-Add new files to existing folder,              # ignore-Do nothing if folder exists, error-Throw exception if folder exists
+    compression='gzip'   # none, gzip, bzip2, snappy, lz4, deflate
+)
+
+# COMMAND ----------
+
+# Write to single file (coalesce)
+# Spark writes multiple part files by default. Forces to write to one CSV file
+df.coalesce(1).write.csv(f"{base}/coalesce_csv_write",header=True,mode = "overwrite")
+
+# Writing to multiple files.
+df.repartition(10).write.csv(f"{base}/repartition_csv_write")
+
+# COMMAND ----------
+
+# write partitioned csv data
+df.write.partitionBy("color").csv(f"{base}/partitioned_csv_write",mode = "overwrite")
+
+# Read partitioned data
+df = spark.read.csv(f"{base}/partitioned_csv_write")
+df.filter("color = 'red'").show()
+
+# COMMAND ----------
+
+# Read csv file - Basic
+spark.read.csv(f"{base}/basic_csv_write", header = True, inferSchema = True).show()
+
+# Read csv file - all options
+spark.read.csv(
+        f"{base}/basic_csv_write",
+        header = True,
+        inferSchema = True
+    ).show()
+
+# COMMAND ----------
+
+df = spark.createDataFrame([
+    ['red',   'banana', 1, 10],
+    ['blue',  'banana', 2, 20],
+    ['red',   'carrot', 3, 30],
+    ['blue',  'grape',  4, 40],
+    ['red',   'carrot', 5, 50],
+    ['black', 'carrot', 6, 60],
+    ['red',   'banana', 7, 70],
+    ['red',   'grape',  8, 80]
+    ],schema = ['color','fruit','price1','price2'])
+
+df.show()
+base = '/Volumes/workspace/default/pyspark_io'
+
+# write to parquet
+df.write.parquet(f"{base}/parquet_data_write", mode='Overwrite',compression = 'snappy')
+
+# Read from parquet
+df_parquet = spark.read.parquet(f"{base}/parquet_data_write").show()
+
+# COMMAND ----------
+
+df = spark.createDataFrame([
+    ['red',   'banana', 1, 10],
+    ['blue',  'banana', 2, 20],
+    ['red',   'carrot', 3, 30],
+    ['blue',  'grape',  4, 40],
+    ['red',   'carrot', 5, 50],
+    ['black', 'carrot', 6, 60],
+    ['red',   'banana', 7, 70],
+    ['red',   'grape',  8, 80]
+    ],schema = ['color','fruit','price1','price2'])
+
+df.show()
+base = '/Volumes/workspace/default/pyspark_io'
+
+# write to orc
+df.write.orc(f"{base}/orc_data_write",mode = "overwrite")
+
+# Read from orc
+df_orc = spark.read.orc(f"{base}/orc_data_write").show()
+
+# COMMAND ----------
+
+df = spark.createDataFrame([
+    ['red',   'banana', 1, 10],
+    ['blue',  'banana', 2, 20],
+    ['red',   'carrot', 3, 30],
+    ['blue',  'grape',  4, 40],
+    ['red',   'carrot', 5, 50],
+    ['black', 'carrot', 6, 60],
+    ['red',   'banana', 7, 70],
+    ['red',   'grape',  8, 80]
+    ],schema = ['color','fruit','price1','price2'])
+
+df.show()
+base = '/Volumes/workspace/default/pyspark_io'
+
+# write to json
+df.write.json(f"{base}/json_data_write",mode="overwrite")
+
+# Read from json
+df_json = spark.read.json(f"{base}/json_data_write").show()
+
+# Read from multiline json
+df_multi_json = spark.read.json(f"{base}/json_data_write",multiLine=True).show()
+
+
+# COMMAND ----------
+
+# Write as delta
+df.write.format("delta").mode("overwrite").save(f"{base}/delta_data_write")
+
+# Read from delta
+df_delta = spark.read.format("delta").load(f"{base}/delta_data_write").show()
+
+# COMMAND ----------
+
+# jdbc write
+df.write.jdbc(
+    url="jdbc:postgresql://host:5432/db",
+    table="output_table",
+    mode="append",
+    properties={"user": "u", "password": "p"}
+)
+
+# jdbc read
+df = spark.read.jdbc(
+    url="jdbc:postgresql://host:5432/db",
+    table="schema.table",
+    properties={"user": "u", "password": "p"}
+)
+
+# jdbc paralell reads
+df = spark.read.jdbc(
+    url="jdbc:postgresql://host:5432/db",
+    table="orders",
+    column="id",
+    lowerBound=1,
+    upperBound=1000000,
+    numPartitions=10,
+    properties={"user": "u", "password": "p"}
+)
+
+# COMMAND ----------
+
+# Reading from text file
+df = spark.read.text(f"{base}/text_file")
+
+# reading from binary file
+df = spark.read.format("binaryFile").load(f"{base}/images")
