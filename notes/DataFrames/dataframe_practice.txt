@@ -322,5 +322,255 @@ Alternatives to collect to avoid out of memory issues.
     Column name conflicts after join() — use alias() or bracket notation to disambiguate.
 
 ------------------------------------------------------------------------------
+# explain () -reading execution plans.
 
+1.explain() 
+    Shows how Spark will run your DataFrame code
+    Helps find performance issues like shuffles and unnecessary scans
+    Shows only the Physical Plan
 
+2.explain(True) 
+    Shows all 4 plans:
+        Parsed Logical Plan -
+            Shows your query exactly as written, without checking column names or types.
+        Analyzed Logical Plan -
+            Spark validates column names, resolves data types, and confirms the query is correct.
+        Optimized Logical Plan-
+            Catalyst applies optimizations like predicate pushdown and column pruning.
+        Physical Plan-
+            Final execution strategy Spark will run (joins, scans, shuffles, codegen)
+            Important Physical Plan keywords:
+                Filter → row filtering
+                Project → column selection
+                Scan → reading data
+                Exchange → shuffle (expensive)
+                HashAggregate → groupBy
+                BroadcastHashJoin → small table join
+                SortMergeJoin → large table join with shuffle
+
+3.Use explain() or explain(True) to:
+    Check for shuffles
+    Verify predicate pushdown
+    Confirm broadcast join usage
+    Understand Spark’s execution strategy
+
+------------------------------------------------------------------------------
+# Removing Duplicates
+
+1.distinct()
+    Removes full‑row duplicates
+    Checks all columns
+    Keeps one copy of each unique row
+    Causes a shuffle (wide transformation)
+
+2. dropDuplicates()
+    Same as distinct() when no columns are given
+    Removes full‑row duplicates
+    Keeps one copy of each unique row
+    Causes a shuffle
+
+3. dropDuplicates(['col'])
+    Removes duplicates based on specific columns
+    Keeps the first occurrence of each unique value
+    More flexible than distinct()
+    Also triggers a shuffle
+
+4. General Notes
+    Both distinct() and dropDuplicates() are wide transformations
+    Both require data movement across partitions
+    Use subset version when you only need to dedupe by certain columns
+
+------------------------------------------------------------------------------
+# Narrow vs Wide Transformations 
+
+1. What is it?
+    Every PySpark transformation is either narrow or wide
+    The difference = does data need to move between partitions?
+        No → Narrow
+        Yes → Wide (shuffle)
+
+2. Narrow Transformations:
+    Each partition processes independently — no data exchange
+    No shuffle — fast
+    All narrow transforms chain into one stage in Spark UI
+    Examples: select, filter, where, withColumn, drop, withColumnRenamed, map, flatMap, union
+    Think: "each row can be processed in place"
+
+3. Wide Transformations:
+    Data moves across partitions — shuffle required
+    Shuffle = data sent over network = expensive
+    Each shuffle creates a new stage boundary in Spark UI
+    Shows as Exchange in explain() output
+    Examples: groupBy, join, distinct, sort, orderBy, repartition
+    Think: "Spark needs to see all data to compute the result"
+
+4. Special case — coalesce:
+    Only reduces partition count — no full shuffle
+    Treated as narrow even though it changes partitions
+    Use coalesce to reduce; use repartition to increase or redistribute
+
+5. How Spark chains them (DAG):
+    Narrow transforms are pipelined into one stage — no pause between them
+    A shuffle breaks the pipeline and starts a new stage
+    Fewer shuffles = fewer stages = faster job
+
+6. Why it matters in interviews:
+    Explains why some jobs are slow (too many shuffles)
+    Explains Spark UI stages (each stage = one group of narrow ops)
+    Optimization tip: push filter and select before groupBy or join to reduce shuffle data
+
+7.Partition awareness is the foundation of Spark performance
+    Always know how many partitions your DataFrame starts with.
+    Many performance issues come from too many or too few partitions.
+
+8. Narrow transformations never change partition count
+    filter, select, withColumn, drop → no shuffle
+    Spark keeps the same partitions and pipelines them in one stage.
+
+9.  Wide transformations always cause a shuffle
+    groupBy, join, distinct, sort, repartition → shuffle
+    Shuffle = data movement across nodes → expensive.
+
+10. repartition() = shuffle, coalesce() = no shuffle
+    repartition() → redistributes data → wide
+    coalesce() → only reduces partitions → narrow
+    This is a common interview trick question.
+
+11. Broadcast join removes shuffle
+    Normal join → shuffle on both sides
+    Broadcast join → small table sent to all executors → no shuffle
+    Huge performance win.
+
+12. Spark UI shows stage boundaries clearly
+        Narrow ops → 1 stage
+        Wide ops → 2+ stages
+        Each shuffle = new stage.
+
+13. explain(True) reveals all optimization steps
+    Parsed → Analyzed → Optimized → Physical
+    Helps you confirm:
+        predicate pushdown
+        column pruning
+        join strategy
+        shuffle boundaries
+
+14. toDebugString() shows RDD lineage
+    Shows parent → child relationships
+    Shows shuffle dependencies
+    Helps you understand the DAG at the lowest level.
+
+15. distinct() and dropDuplicates() are wide
+    Both require comparing rows across partitions
+    Both cause a shuffle
+    Both create a new stage.
+
+16. Spark pipelines narrow → breaks at shuffle → pipelines again
+    Narrow ops chain together
+    Shuffle breaks the chain
+    After shuffle, Spark starts a new narrow pipeline
+    This is the core of Spark’s execution model.
+------------------------------------------------------------------------------
+# Getting data IN/OUT
+
+1️⃣ CSV — Human‑Readable Text Format
+    Reading ->  
+        Use header=True for column names.
+        Use inferSchema=True for auto‑types (slow on large files).
+        Supports sep, quote, escape, nullValue, multiLine, encoding.
+        Best for interoperability, not analytics.           
+    Writing ->  
+        Supports header, sep, mode, compression.
+        Does NOT support nullValue on write.
+        Produces multiple part files unless you use coalesce(1).
+    When to use ->
+        Sharing data with non‑Spark tools.
+        Debugging or quick inspection.
+
+2️⃣ Parquet — Columnar Binary Format (Most Used)
+    Reading ->
+        Fast, schema embedded, no need for inferSchema.
+    Writing ->
+        Supports mode and compression (snappy default).
+        Highly optimized for Spark.
+    When to use ->
+        Analytical workloads.
+        Large datasets.
+        Filtering on specific columns.
+
+3️⃣ ORC — Optimized Row Columnar
+    Reading ->
+        Similar to Parquet; schema embedded.
+    Writing ->
+        Supports mode and compression (zlib default).
+    When to use ->
+        Hive‑centric environments.
+        When compression ratio matters.
+
+4️⃣ JSON — Semi‑Structured Format
+    Reading ->
+        Great for nested data.
+        Use multiLine=True for pretty‑printed JSON.
+    Writing ->
+        Writes JSON Lines format (one record per line).
+    When to use ->
+        Logs, API responses, nested structures.
+
+5️⃣ JDBC — Databases
+    Reading ->
+        Use jdbc() with URL, table, and credentials.
+        For large tables, always use partitioning (column, lowerBound, upperBound, numPartitions).
+     Writing ->
+        Use mode="append" for inserts.
+        Requires JDBC driver.
+    When to use ->
+        Moving data between Spark and RDBMS.
+        ETL pipelines.
+
+6️⃣ Delta Lake — Databricks Native Format
+    Reading ->
+        Use format("delta").
+        Supports time travel.
+    Writing ->
+        ACID transactions.
+        Schema enforcement & evolution.
+        Supports MERGE, UPDATE, DELETE.
+    When to use ->
+        Production pipelines.
+        Slowly changing dimensions.
+        Reliable data lakes.
+
+7️⃣ Text & Binary Files
+    Text ->
+        One line per row.
+        Good for logs or raw text.
+    Binary ->
+    Reads images/files as binary content.
+    Useful for ML pipelines.
+
+8️⃣ Write Modes (All File Types)
+    overwrite → replace folder
+    append → add new files
+    ignore → skip if exists
+    error → fail if exists (default)
+    When to use ->
+        overwrite → reprocessing
+        append → incremental loads
+        ignore → idempotent pipelines
+        error → protect data
+
+9️⃣ Partitioning on Write
+    Purpose: Speed up reads by splitting data into folders.
+    Use partitionBy("col").
+    Spark reads only relevant partitions (partition pruning).
+    Avoid high‑cardinality columns.
+    Best for date, region, status, category.
+
+🔟 Controlling File Count
+    coalesce(1) → single output file.
+    coalesce(n) → reduce partitions.
+    repartition(n) → increase partitions.
+    When to use ->
+        coalesce → small datasets, exports.
+        repartition → large datasets, parallel writes.
+
+------------------------------------------------------------------------------
