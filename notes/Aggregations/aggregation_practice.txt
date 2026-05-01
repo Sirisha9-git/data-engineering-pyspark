@@ -111,3 +111,50 @@ GroupedData →  has: avg(), sum(), count(), agg()
     Using collect_list on huge groups → OOM risk
 
 ------------------------------------------------------------------------------
+# Null Handling
+1. Understanding Nulls
+    Spark uses null to represent missing values
+    null == null → false
+    Comparisons with null always return false
+    Nulls break joins, filters, and aggregations
+    Must be handled explicitly
+
+2. fillna() — Replace Nulls
+    Replace all nulls: df.fillna("Unknown")
+    Column‑specific: df.fillna({"city": "Unknown", "age": 0})
+    Numeric only: df.fillna(0)
+    String only: df.fillna("NA")
+    Common for categorical + numeric cleaning
+
+3. dropna() — Drop Rows
+    Drop rows with any null: df.dropna()
+    Drop rows where all columns are null: df.dropna(how="all")
+    Drop rows where specific columns are null: df.dropna(subset=["city"])
+    Keep rows with at least N non‑nulls: df.dropna(thresh=3)
+
+4. na.replace() — Replace Dirty Values
+    Replace one value: df.na.replace("?", None)
+    Replace multiple: df.na.replace(["", "NA"], None)
+    Replace using dict: df.na.replace({"M": "Male"})
+    Useful for cleaning CSV imports
+
+5. coalesce() — First Non‑Null Value
+    Returns first non‑null: coalesce("city", "state", lit("Unknown"))
+    Good for fallback logic
+    Useful in joins and column merging
+
+6. when().otherwise() — Conditional Null Handling
+    Basic: when(col("age").isNull(), 0).otherwise(col("age"))
+    Supports complex conditions
+    Often used for creating clean columns
+
+7. isNull() / isNotNull()
+    Filter nulls: df.filter(col("city").isNull())
+    Filter non‑nulls: df.filter(col("city").isNotNull())
+
+8. Counting Nulls
+    Count nulls per column:
+    count(when(col(c).isNull(), c)).alias(c)
+    count("*") counts rows
+    count(col) ignores nulls
+------------------------------------------------------------------------------
