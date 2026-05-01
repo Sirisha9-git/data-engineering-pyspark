@@ -1,0 +1,76 @@
+PySpark Joins — 
+
+1. Basic Join Syntax
+  df1.join(df2, df1.key == df2.key, "join_type")
+  Supported join types: inner, left, right, full, left_semi, left_anti, cross
+  Join on same column name: df1.join(df2, "cust_id")
+
+2. Broadcast Join
+  Use when one table is small (<10MB)
+  Avoids shuffle
+  Fastest join strategy
+  Syntax: df1.join(broadcast(df2), "cust_id")
+  Alternative: df2.hint("broadcast")
+
+3. Inner Join
+  Returns matching rows from both tables
+  Syntax: df1.join(df2, "cust_id", "inner")
+
+4. Left Join
+  All rows from left, matched rows from right
+  Syntax: df1.join(df2, "cust_id", "left")
+
+5. Right Join
+  All rows from right, matched rows from left
+  Syntax: df1.join(df2, "cust_id", "right")
+
+6. Full Outer Join
+  All rows from both tables
+  Syntax: df1.join(df2, "cust_id", "full")
+
+7. Left Semi Join
+  Returns rows from left where match exists in right
+  Does NOT return right columns
+  Syntax: df1.join(df2, "cust_id", "left_semi")
+
+8. Left Anti Join
+  Returns rows from left where NO match exists in right
+  Syntax: df1.join(df2, "cust_id", "left_anti")
+
+9. Right Semi Join (Not Supported)
+  PySpark does not support right_semi
+  Replacement: swap tables + left_semi
+  Example: df_right.join(df_left, "cust_id", "left_semi")
+
+10. Sort‑Merge Join (SMJ)
+  Default join strategy for large tables
+  Requires shuffle + sort
+  Slower than broadcast
+  Detected by: SortMergeJoin in explain(True)
+
+11. Broadcast Join Strategy
+  Spark auto‑broadcasts small tables
+  Detected by: BroadcastHashJoin in explain(True)
+  Eliminates shuffle
+
+12. Compare Join Plans
+  Use .explain(True) to inspect join strategy
+  Look for:
+  BroadcastHashJoin
+  SortMergeJoin
+  ShuffledHashJoin
+  BroadcastNestedLoopJoin
+
+13. Join With Multiple Conditions
+  Use & between conditions
+  Example Code:
+  df1.join(df2,
+      (df1.cust_id == df2.cust_id) &
+      (df1.state == df2.state),
+      "inner")  
+
+14. Join + Aggregation
+  Join → groupBy → agg
+  Example Code:
+  joined = df1.join(df2, "cust_id", "left")
+  joined.groupBy("cust_id").agg(sum("amount"))
