@@ -182,3 +182,128 @@ color_df.select(
     lag('price1', 1).over(w).alias('prev_price1'),      # previous row's v1
     lead('price1', 1).over(w).alias('next_price1')      # next row's v1
 ).orderBy('color').show()
+
+# COMMAND ----------
+
+# Null Handling input data
+
+# this contains Nulls -> Missing color,Missing fruit,Missing numeric values (v1, v2)
+# this contains dirty values -> "N/A","unknown","?","null","NA","missing",empty string ""
+# this contains mixed types -> Numeric columns with nulls, String columns with nulls and dirty values
+# this contains realistic scenarios -> Rows with partial data, Rows with all missing data, Rows with inconsistent formatting, Entire row with all nulls except ID
+
+data = [
+    ("A101", "red",    "banana",   10,   1.5,   None),
+    ("A102", None,     "banana",   None, None,  "N/A"),   
+    ("A103", "blue",   None,       30,   3.2,   ""),     
+    ("A104", "red",    "carrot",   None, 4.1,   "unknown"),
+    ("A105", None,     None,       None, None,  None),   
+    ("A106", "black",  "carrot",   60,   None,  "?"),      
+    ("A107", "red",    "banana",   70,   7.0,   "null"),
+    ("A108", "green",  "grape",    None, 8.5,   "NA"),
+    ("A109", "",       "banana",   90,   None,  "missing"),
+    ("A110", "blue",   "",         None, 2.2,   None)
+]
+
+columns = ["id", "color", "fruit", "v1", "v2", "notes"]
+null_df = spark.createDataFrame(data,columns)
+null_df.show()
+
+# COMMAND ----------
+
+# fillna()
+# Replace null fruit with "Unknown"
+null_df.fillna({"fruit":"Unknown"}).show()
+
+# Replace null numeric values with 0 
+# Numeric only
+null_df.fillna(0).show()
+
+# Replace null color with "NoColor"
+null_df.fillna({"color":"Nocolor"}).show()
+
+# COMMAND ----------
+
+# dropna()
+# Drop any row with at least one null
+null_df.dropna().show()
+
+# Drop only if ALL columns are null
+null_df.dropna(how="all").show()
+
+# Drop only if specific columns are null
+null_df.dropna(subset=["fruit","color"]).show()
+
+# Drop rows with fewer than N non‑null values
+null_df.dropna(thresh=4).show()
+
+# Drop rows where all values except ID are null
+# Drop rows where fruit is null
+null_df.dropna(subset=["fruit"]).show()
+
+# Drop rows where both v1 and v2 are null
+null_df.dropna(subset=["v1","v2"])
+
+# COMMAND ----------
+
+# na.replace()
+# Replace dirty values: "N/A", "NA", "?", "unknown", "null", "missing", "" → None   (Replace multiple values)
+# Replace "banana" → "BANANA"   (Replace single value)
+# Replace with dictionary 
+
+null_df.na.replace(["N/A","NA","?","unknown","null","missing",""],None).na.replace("banana","BANANA").show()
+null_df.na.replace({"N/A":"None","NA":"None"}).show()
+
+# COMMAND ----------
+
+# Create clean columns   # when().otherwise()
+# fruit_clean: If fruit is null → "Unknown", Else uppercase
+# color_clean: Replace empty string with "Unknown"
+
+from pyspark.sql.functions import col, when, upper
+null_df.withColumn("fruit_clean",when(col("fruit").isNull(),"Unknown").otherwise(upper(col("fruit")))).show()
+
+null_df.withColumn("color_clean",when(col("color")=="","Unknown").otherwise(col("color"))).show()
+
+# COMMAND ----------
+
+from pyspark.sql.functions import col, when, upper,count
+# Count all rows
+null_df.count()
+
+# count nulls per column
+null_df.filter(col("fruit").isNull()).count()
+
+# Count not nulls per column
+null_df.filter(col("fruit").isNotNull()).count()
+
+# Count not nulls per column
+null_df.select(count("fruit")).show()
+
+# COMMAND ----------
+
+from pyspark.sql.functions import lit,coalesce
+# coalesce() returns the first non‑null value from the list of columns 
+null_df.withColumn("not_null_col",coalesce("color","fruit",lit("NotKnown"))).show()
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC
+
+# COMMAND ----------
+
+# nulls in joins
+# 2nd dataset ( fruit_info)
+
+data_fruit = [
+  ("apple",  "fresh"),
+    ("banana", "fresh"),
+    ("orange", "citrus"),
+    ("",       "unknown"),     # empty string
+    (None,     "missing")      # null value
+]
+columns = ["fruit","category"]
+fruit_df = spark.createDataFrame(data_fruit,columns)
+
+join_df = null_df.join(fruit_df,"fruit","left").show()
