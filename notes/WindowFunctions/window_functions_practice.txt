@@ -1,0 +1,81 @@
+# Window Functions
+1️⃣ Window.partitionBy
+  Divides data into groups (partitions)
+  Window functions operate independently inside each partition
+  Required for per‑group ranking, running totals, top‑N
+  Does NOT change the DataFrame order by itself
+  Used only inside a window specification
+
+2️⃣ Window.orderBy
+  Defines row order inside each partition
+  Required for ranking, lag/lead, running totals, rolling windows
+  Must be numeric/timestamp for rangeBetween
+  Does not sort the DataFrame unless used with orderBy() outside window
+
+3️⃣ row_number
+  Assigns unique sequential numbers per partition
+  No ties — always unique
+  Commonly used for top‑N per group
+  Useful for deduplication (keep latest record)
+
+4️⃣ rank / dense_rank
+  rank(): allows gaps (1,2,2,4)
+  dense_rank(): no gaps (1,2,2,3)
+  Used for leaderboard‑style ranking
+  Requires orderBy inside window
+
+5️⃣ lag / lead
+  lag(): fetches previous row value
+  lead(): fetches next row value
+  Requires orderBy to define row sequence
+  Used for difference calculations, change detection, time‑series analysis
+
+6️⃣ Running Total (sum().over())
+  Cumulative sum from first row → current row
+  Uses frame: unboundedPreceding → currentRow
+  Requires orderBy to define accumulation order
+  Used for cumulative metrics (revenue, counts, spend)
+
+7️⃣ rowsBetween / rangeBetween
+  rowsBetween
+    Row‑based frame (uses row positions)
+    Example: last 2 rows + current row
+    Used for rolling windows
+  rangeBetween
+    Value‑based frame (uses numeric/timestamp ranges)
+    Groups rows based on value similarity
+    Cannot be used on strings
+    Used for time‑based windows, value‑based grouping
+
+8️⃣ Rolling Sums / Moving Averages
+  Rolling window = fixed number of rows sliding over data
+  rowsBetween(-N, 0) → last N rows
+  Rolling sum = sum of last N rows
+  Moving average = rolling sum ÷ N
+  Used for smoothing trends and time‑series analysis
+
+9️⃣ Top‑N Per Group
+  Use row_number + partitionBy + orderBy
+  Filter rn = 1 for top 1
+  Filter rn <= N for top N
+  Used for latest record, highest value, best performer per group
+
+🔟 Ten Practice Problems (Summary Points)
+  Running total per fruit
+  Running average per fruit
+  Rolling 2‑row sum
+  Rolling 3‑row average
+  Rank by v1 within color
+  Dense rank by v2
+  Previous v1 using lag
+  Next v2 using lead
+  Top 1 fruit per color
+  Difference between current and previous v1
+
+1️⃣1️⃣ Debugging Window Queries
+  Always use .over() with window functions
+  Must include orderBy for ranking, lag/lead, running totals
+  rangeBetween requires numeric/timestamp order column
+  rowsBetween uses row positions, not values
+  Avoid duplicate column names after joins
+  Use partitionBy for per‑group calculations
