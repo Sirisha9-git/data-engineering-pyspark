@@ -1,0 +1,83 @@
+⭐ PySpark ETL — Theory Notes (Text‑Only)
+1. Change Data Capture (CDC)
+  CDC identifies how incoming records differ from existing records.
+  It classifies each record into:
+    Insert → new record not present previously
+    Update → existing record with changed attributes
+    No‑change → existing record with identical attributes
+  CDC is used in incremental ETL pipelines to avoid full reloads.
+  Helps reduce processing time and ensures only changed data is handled.  
+  CDC logic typically compares source and target datasets on key columns.
+  CDC is format‑agnostic and can be implemented with any storage system.
+  CDC is foundational for SCD2, upserts, and incremental fact loads.
+
+2. Slowly Changing Dimension Type 2 (SCD2)
+  SCD2 preserves full historical changes in dimension tables.
+  Instead of overwriting old values, new versions of records are added.
+  Each version of a record includes metadata fields such as:
+    start_date → when the version became active
+    end_date → when the version was replaced
+    is_current → flag indicating the active version
+  SCD2 ensures accurate historical reporting and trend analysis.
+  Used in customer profiles, product attributes, employee roles, etc.
+  Requires identifying changed records and closing old versions.
+  Ensures that analytics reflect the correct state at any point in time.
+
+3. Merge Logic (General Upsert Concept)
+  Merge logic combines insert and update operations in a single step.
+  It matches incoming records with existing records based on a key.
+    If a match is found → update existing record.
+    If no match is found → insert new record.
+  Merge logic ensures idempotent ETL (safe to rerun without duplication).
+  Commonly used for CDC, dimension updates, and fact table maintenance.
+  Merge behavior depends on business rules (full overwrite, selective update, etc.).
+
+4. Conditional Logic (when / otherwise)
+  Implements rule‑based transformations similar to SQL CASE statements.
+  Used to categorize, flag, or derive new columns based on conditions.
+  Supports multiple cascading conditions.
+  Essential for applying business rules during ETL.
+  Helps standardize values, handle nulls, and create classification fields.
+
+5. Duplicate Handling (dropDuplicates)
+  Removes duplicate rows from a dataset.
+  Can operate on all columns or a subset of key columns.
+  Useful after ingestion from noisy sources or after joins/unions.
+  Non‑deterministic when multiple duplicates exist (keeps an arbitrary row).
+  Best for simple deduplication where business rules are not required.
+
+6. Metadata Columns (current_timestamp, lit)
+  ETL pipelines often add metadata fields for auditing and lineage.
+  current_timestamp adds the processing time of the ETL job.
+  lit adds static values such as source system names or batch IDs.
+  Metadata helps track data freshness, source origin, and load cycles.
+  Essential for debugging and compliance in production systems.
+
+7. Deduplication Using Window Functions
+  Used when deduplication requires business rules, not simple removal.
+  Window functions allow selecting:
+    Latest record by timestamp
+    Highest priority record
+    First or last occurrence
+  Ensures deterministic deduplication based on ordering criteria.
+  Preferred over simple duplicate removal when datasets contain multiple versions.
+  Common in CDC, SCD2, and incremental ingestion pipelines.
+
+8. End‑to‑End ETL Flow (Conceptual Overview)
+  Ingest incremental data from source systems.
+  Detect changes using CDC logic.
+  Apply SCD2 to maintain historical accuracy.
+  Add metadata for auditing and lineage.
+  Deduplicate using window functions when necessary.
+  Apply business rules using conditional logic.
+  Write final outputs to curated layers for analytics.
+  Ensures reliable, traceable, and consistent data pipelines.
+
+9. Key Takeaways
+  CDC identifies what changed; SCD2 preserves how it changed over time.
+  Merge logic enables efficient upserts in ETL pipelines.
+  Conditional logic supports business rule transformations.
+  Duplicate handling ensures clean and reliable datasets.
+  Metadata columns improve traceability and auditability.
+  Window‑based deduplication provides deterministic, rule‑driven results. 
+  All concepts can be implemented in PySpark without relying on any specific storage format.
