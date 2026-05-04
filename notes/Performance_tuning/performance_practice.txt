@@ -1,0 +1,77 @@
+# PySpark Performance Tuning 
+1. Catalyst Optimizer
+  Converts DataFrame code into logical → optimized → physical plans
+  Applies predicate pushdown to reduce data read
+  Removes unused columns through projection pruning
+  Reorders joins for better performance
+  Simplifies expressions and filters
+  Works best with built‑in functions (not UDFs)
+  Cannot optimize Python UDF logic
+
+2. Tungsten Engine
+  Handles physical execution of queries
+  Uses off‑heap memory for efficient storage
+  Executes operations in binary format
+  Uses whole‑stage code generation for speed
+  Built‑in functions benefit from codegen
+  Python UDFs bypass Tungsten and run slower
+
+3. repartition()
+  Changes number of partitions (increase or decrease)
+  Always triggers a shuffle
+  Useful before joins to balance data
+  Useful before writing large datasets
+  Can partition by specific columns
+  Helps distribute skewed keys evenly
+
+4. coalesce()
+  Reduces number of partitions
+  Does not shuffle data
+  Collapses existing partitions
+  Best after filters when data shrinks
+  Good for reducing output file count
+
+5. cache() / persist()
+  Stores DataFrames in memory or disk
+  Avoids recomputation of expensive transformations
+  Useful for iterative workloads
+  persist() supports multiple storage levels
+  cache() = MEMORY_ONLY
+  Must call an action to materialize cache
+
+6. unpersist()
+  Removes cached/persisted data
+  Frees memory and storage
+  Prevents memory pressure in long jobs
+
+7. explain(True)
+  Shows parsed, analyzed, optimized, and physical plans
+  Helps identify shuffles (Exchange)
+  Helps detect broadcast joins (BroadcastHashJoin)
+  Shows codegen usage (WholeStageCodegen)
+  Helps verify partitioning strategy
+
+8. checkpoint()
+  Breaks long lineage chains
+  Writes DataFrame to reliable storage
+  Useful for long DAGs
+  Helps avoid stack overflow in deep transformations
+  Requires checkpoint directory configuration
+
+9. Adaptive Query Execution (AQE)
+  Optimizes queries at runtime
+  Coalesces shuffle partitions
+  Handles skew automatically
+  Switches join strategies dynamically
+  Enabled via spark.sql.adaptive.enabled=true
+
+10. Data Skew Handling
+  Occurs when some keys have much more data
+  Causes slow tasks and unbalanced partitions
+  Fixes include:
+  Salting keys
+  Repartitioning by composite keys
+  Broadcasting small tables
+  Filtering early
+  Using AQE skew optimization
+  Goal: distribute heavy keys across multiple partitions
